@@ -3,14 +3,12 @@
 // =====================================================
 const GITHUB_USERNAME = "yogeshdongare87-ai";
 const GITHUB_REPO = "Survey-Number-Maps";
-const GITHUB_BRANCH = "main"; 
+const GITHUB_BRANCH = "main"; // Falls back to 'master' automatically if needed
 
-// GitHub REST API for reading folder listings dynamically
-const API_BASE_URL = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/contents/data/maps`;
+// Relative path for fetching actual GeoJSON files on GitHub Pages
+const MAPS_BASE_PATH = "./data/maps";
 
-// Raw GitHub URL for fetching GeoJSON file content
-const RAW_BASE_URL = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/${GITHUB_BRANCH}/data/maps`;
-
+let locationData = {};
 let polygonLayer = null;
 let lineLayer = null;
 let pointLayer = null;
@@ -38,89 +36,103 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 // =====================================================
-// GITHUB DIRECTORY FETCHER (Replaces locations.json)
+// REAL-TIME FOLDER DISCOVERY (GitHub Trees API)
+// Fetches all repository folders in 1 single API call
 // =====================================================
-async function fetchFoldersFromGitHub(subPath = "") {
-    const url = subPath ? `${API_BASE_URL}/${subPath}` : API_BASE_URL;
-    const res = await fetch(url);
-    
-    if (!res.ok) {
-        throw new Error(`GitHub API HTTP ${res.status}`);
-    }
-    
-    const items = await res.json();
-    // Return only folder names (filter out loose files)
-    return items.filter(item => item.type === "dir").map(item => item.name);
-}
+async function fetchRepoFoldersRealTime() {
+    districtSelect.innerHTML = `<option value="">Loading real-time folders...</option>`;
 
-// =====================================================
-// DYNAMIC DROPDOWN POPULATION
-// =====================================================
-async function loadDistricts() {
+    let url = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/git/trees/${GITHUB_BRANCH}?recursive=1`;
+
     try {
-        districtSelect.innerHTML = `<option value="">Loading Districts...</option>`;
-        const districts = await fetchFoldersFromGitHub("");
-        
-        districtSelect.innerHTML = `<option value="">Select District</option>`;
-        districts.sort().forEach(d => {
-            districtSelect.innerHTML += `<option value="${d}">${d}</option>`;
+        let res = await fetch(url);
+
+        // Fallback to 'master' branch if 'main' returns 404
+        if (!res.ok && res.status === 404) {
+            url = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/git/trees/master?recursive=1`;
+            res = await fetch(url);
+        }
+
+        if (!res.ok) {
+            throw new Error(`GitHub API HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        locationData = {};
+
+        // Parse paths starting with: data/maps/District/Taluka/Village/...
+        data.tree.forEach(item => {
+            const parts = item.path.split("/");
+            if (parts.length >= 5 && parts[0].toLowerCase() === "data" && parts[1].toLowerCase() === "maps") {
+                const district = parts[2];
+                const taluka = parts[3];
+                const village = parts[4];
+
+                if (!locationData[district]) {
+                    locationData[district] = {};
+                }
+                if (!locationData[district][taluka]) {
+                    locationData[district][taluka] = new Set();
+                }
+                locationData[district][taluka].add(village);
+            }
         });
+
+        // Convert Sets to sorted Arrays
+        Object.keys(locationData).forEach(d => {
+            Object.keys(locationData[d]).forEach(t => {
+                locationData[d][t] = Array.from(locationData[d][t]).sort();
+            });
+        });
+
+        populateDistricts();
+
     } catch (err) {
-        console.error("Error loading districts:", err);
-        districtSelect.innerHTML = `<option value="">Failed to load</option>`;
-        alert("Failed to read district folders from GitHub repository.");
+        console.error("Error fetching repository tree:", err);
+        districtSelect.innerHTML = `<option value="">Failed to load folders</option>`;
+        alert("Failed to load real-time folder data from GitHub.");
     }
 }
 
-districtSelect.addEventListener("change", async function () {
-    talukaSelect.innerHTML = `<option value="">Loading Talukas...</option>`;
-    villageSelect.innerHTML = `<option value="">Select Village</option>`;
-    talukaSelect.disabled = true;
-    villageSelect.disabled = true;
-    loadMapBtn.disabled = true;
+// Populate District Dropdown
+function populateDistricts() {
+    districtSelect.innerHTML = `<option value="">Select District</option>`;
+    const districts = Object.keys(locationData).sort();
 
-    if (!this.value) {
-        talukaSelect.innerHTML = `<option value="">Select Taluka</option>`;
+    if (districts.length === 0) {
+        districtSelect.innerHTML = `<option value="">No folders found in data/maps</option>`;
         return;
     }
 
-    try {
-        const path = encodeURIComponent(this.value);
-        const talukas = await fetchFoldersFromGitHub(path);
-        
-        talukaSelect.innerHTML = `<option value="">Select Taluka</option>`;
-        talukas.sort().forEach(t => {
+    districts.forEach(d => {
+        districtSelect.innerHTML += `<option value="${d}">${d}</option>`;
+    });
+}
+
+// Dynamic Cascading Dropdowns
+districtSelect.addEventListener("change", function () {
+    talukaSelect.innerHTML = `<option value="">Select Taluka</option>`;
+    villageSelect.innerHTML = `<option value="">Select Village</option>`;
+    talukaSelect.disabled = !this.value;
+    villageSelect.disabled = true;
+    loadMapBtn.disabled = true;
+
+    if (this.value && locationData[this.value]) {
+        Object.keys(locationData[this.value]).sort().forEach(t => {
             talukaSelect.innerHTML += `<option value="${t}">${t}</option>`;
         });
-        talukaSelect.disabled = false;
-    } catch (err) {
-        console.error("Error loading talukas:", err);
-        talukaSelect.innerHTML = `<option value="">Failed to load</option>`;
     }
 });
 
-talukaSelect.addEventListener("change", async function () {
-    villageSelect.innerHTML = `<option value="">Loading Villages...</option>`;
-    villageSelect.disabled = true;
+talukaSelect.addEventListener("change", function () {
+    villageSelect.innerHTML = `<option value="">Select Village</option>`;
+    villageSelect.disabled = !this.value;
     loadMapBtn.disabled = true;
 
-    if (!this.value) {
-        villageSelect.innerHTML = `<option value="">Select Village</option>`;
-        return;
-    }
-
-    try {
-        const path = `${encodeURIComponent(districtSelect.value)}/${encodeURIComponent(this.value)}`;
-        const villages = await fetchFoldersFromGitHub(path);
-        
-        villageSelect.innerHTML = `<option value="">Select Village</option>`;
-        villages.sort().forEach(v => {
+    if (this.value && locationData[districtSelect.value][this.value]) {
+        locationData[districtSelect.value][this.value].forEach(v => {
             villageSelect.innerHTML += `<option value="${v}">${v}</option>`;
         });
-        villageSelect.disabled = false;
-    } catch (err) {
-        console.error("Error loading villages:", err);
-        villageSelect.innerHTML = `<option value="">Failed to load</option>`;
     }
 });
 
@@ -128,13 +140,13 @@ villageSelect.addEventListener("change", function () {
     loadMapBtn.disabled = !this.value;
 });
 
-// Initialize Districts on Startup
-loadDistricts();
+// Run real-time fetch on load
+fetchRepoFoldersRealTime();
 
 loadMapBtn.addEventListener("click", loadVillageMap);
 
 // =====================================================
-// FETCH GEOJSON MAP DATA FROM GITHUB
+// LOAD GEOJSON MAP FILES FROM GITHUB
 // =====================================================
 async function loadVillageMap() {
     const d = districtSelect.value;
@@ -143,7 +155,7 @@ async function loadVillageMap() {
 
     clearMapLayers();
 
-    const folderPath = `${RAW_BASE_URL}/${encodeURIComponent(d)}/${encodeURIComponent(t)}/${encodeURIComponent(v)}`;
+    const folderPath = `${MAPS_BASE_PATH}/${encodeURIComponent(d)}/${encodeURIComponent(t)}/${encodeURIComponent(v)}`;
 
     let hasLoadedData = false;
 
@@ -185,7 +197,7 @@ async function loadVillageMap() {
 }
 
 // =====================================================
-// FEATURE SELECTION & MAP EVENTS
+// MAP CLICK & SELECTION EVENTS
 // =====================================================
 function setupFeatureEvents(feature, layer, type) {
     layer.on({
@@ -311,7 +323,7 @@ function clearMapLayers() {
 }
 
 // =====================================================
-// MANUAL LOCAL GEOJSON UPLOAD
+// MANUAL LOCAL GEOJSON FILE UPLOAD
 // =====================================================
 if (geojsonInput) {
     geojsonInput.addEventListener("change", function (e) {
