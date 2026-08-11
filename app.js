@@ -3,16 +3,14 @@
 // =====================================================
 const GITHUB_USERNAME = "yogeshdongare87-ai";
 const GITHUB_REPO = "Survey-Number-Maps";
-const GITHUB_BRANCH = "main"; // Change to 'master' if your repo branch is named master
+const GITHUB_BRANCH = "main"; 
 
-// GitHub Raw URL for fetching json files
-// Uses the direct folder relative to your GitHub Pages site
-const BASE_URL = "./data";
+// GitHub REST API for reading folder listings dynamically
+const API_BASE_URL = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/contents/data/maps`;
 
-// Note: If hosting directly on GitHub Pages with index.html in the same repo,
-// you can also use relative path: const BASE_URL = "./data";
+// Raw GitHub URL for fetching GeoJSON file content
+const RAW_BASE_URL = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/${GITHUB_BRANCH}/data/maps`;
 
-let locationData = {};
 let polygonLayer = null;
 let lineLayer = null;
 let pointLayer = null;
@@ -40,50 +38,89 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 // =====================================================
-// 1. FETCH LOCATIONS.JSON FROM GITHUB
+// GITHUB DIRECTORY FETCHER (Replaces locations.json)
 // =====================================================
-fetch(`${BASE_URL}/locations.json`)
-    .then(res => {
-        if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
-        return res.json();
-    })
-    .then(data => {
-        locationData = data;
-        loadDistricts();
-    })
-    .catch(err => {
-        console.error("Failed to load location data:", err);
-        alert("Failed to load location dropdowns. Check console for details.");
-    });
-
-function loadDistricts() {
-    districtSelect.innerHTML = `<option value="">Select District</option>`;
-    Object.keys(locationData).sort().forEach(d => {
-        districtSelect.innerHTML += `<option value="${d}">${d}</option>`;
-    });
+async function fetchFoldersFromGitHub(subPath = "") {
+    const url = subPath ? `${API_BASE_URL}/${subPath}` : API_BASE_URL;
+    const res = await fetch(url);
+    
+    if (!res.ok) {
+        throw new Error(`GitHub API HTTP ${res.status}`);
+    }
+    
+    const items = await res.json();
+    // Return only folder names (filter out loose files)
+    return items.filter(item => item.type === "dir").map(item => item.name);
 }
 
-districtSelect.addEventListener("change", function () {
-    talukaSelect.innerHTML = `<option value="">Select Taluka</option>`;
+// =====================================================
+// DYNAMIC DROPDOWN POPULATION
+// =====================================================
+async function loadDistricts() {
+    try {
+        districtSelect.innerHTML = `<option value="">Loading Districts...</option>`;
+        const districts = await fetchFoldersFromGitHub("");
+        
+        districtSelect.innerHTML = `<option value="">Select District</option>`;
+        districts.sort().forEach(d => {
+            districtSelect.innerHTML += `<option value="${d}">${d}</option>`;
+        });
+    } catch (err) {
+        console.error("Error loading districts:", err);
+        districtSelect.innerHTML = `<option value="">Failed to load</option>`;
+        alert("Failed to read district folders from GitHub repository.");
+    }
+}
+
+districtSelect.addEventListener("change", async function () {
+    talukaSelect.innerHTML = `<option value="">Loading Talukas...</option>`;
     villageSelect.innerHTML = `<option value="">Select Village</option>`;
-    talukaSelect.disabled = !this.value;
+    talukaSelect.disabled = true;
     villageSelect.disabled = true;
     loadMapBtn.disabled = true;
-    if (this.value) {
-        Object.keys(locationData[this.value]).sort().forEach(t => {
+
+    if (!this.value) {
+        talukaSelect.innerHTML = `<option value="">Select Taluka</option>`;
+        return;
+    }
+
+    try {
+        const path = encodeURIComponent(this.value);
+        const talukas = await fetchFoldersFromGitHub(path);
+        
+        talukaSelect.innerHTML = `<option value="">Select Taluka</option>`;
+        talukas.sort().forEach(t => {
             talukaSelect.innerHTML += `<option value="${t}">${t}</option>`;
         });
+        talukaSelect.disabled = false;
+    } catch (err) {
+        console.error("Error loading talukas:", err);
+        talukaSelect.innerHTML = `<option value="">Failed to load</option>`;
     }
 });
 
-talukaSelect.addEventListener("change", function () {
-    villageSelect.innerHTML = `<option value="">Select Village</option>`;
-    villageSelect.disabled = !this.value;
+talukaSelect.addEventListener("change", async function () {
+    villageSelect.innerHTML = `<option value="">Loading Villages...</option>`;
+    villageSelect.disabled = true;
     loadMapBtn.disabled = true;
-    if (this.value) {
-        locationData[districtSelect.value][this.value].sort().forEach(v => {
+
+    if (!this.value) {
+        villageSelect.innerHTML = `<option value="">Select Village</option>`;
+        return;
+    }
+
+    try {
+        const path = `${encodeURIComponent(districtSelect.value)}/${encodeURIComponent(this.value)}`;
+        const villages = await fetchFoldersFromGitHub(path);
+        
+        villageSelect.innerHTML = `<option value="">Select Village</option>`;
+        villages.sort().forEach(v => {
             villageSelect.innerHTML += `<option value="${v}">${v}</option>`;
         });
+        villageSelect.disabled = false;
+    } catch (err) {
+        console.error("Error loading villages:", err);
+        villageSelect.innerHTML = `<option value="">Failed to load</option>`;
     }
 });
 
@@ -91,10 +128,13 @@ villageSelect.addEventListener("change", function () {
     loadMapBtn.disabled = !this.value;
 });
 
+// Initialize Districts on Startup
+loadDistricts();
+
 loadMapBtn.addEventListener("click", loadVillageMap);
 
 // =====================================================
-// 2. FETCH GEOJSON MAP DATA FROM GITHUB
+// FETCH GEOJSON MAP DATA FROM GITHUB
 // =====================================================
 async function loadVillageMap() {
     const d = districtSelect.value;
@@ -103,8 +143,7 @@ async function loadVillageMap() {
 
     clearMapLayers();
 
-    // Construct path with encoded folder names to safely handle spaces
-    const folderPath = `${BASE_URL}/maps/${encodeURIComponent(d)}/${encodeURIComponent(t)}/${encodeURIComponent(v)}`;
+    const folderPath = `${RAW_BASE_URL}/${encodeURIComponent(d)}/${encodeURIComponent(t)}/${encodeURIComponent(v)}`;
 
     let hasLoadedData = false;
 
@@ -136,7 +175,7 @@ async function loadVillageMap() {
         if (hasLoadedData) {
             showInitialDashboardInfo(d, t, v);
         } else {
-            alert(`No GeoJSON files found for ${v} in the repository.`);
+            alert(`No polygon.geojson or line.geojson found in folder "${v}".`);
         }
 
     } catch (error) {
@@ -146,7 +185,7 @@ async function loadVillageMap() {
 }
 
 // =====================================================
-// EVENTS FOR POLYGON & LINE CLICK
+// FEATURE SELECTION & MAP EVENTS
 // =====================================================
 function setupFeatureEvents(feature, layer, type) {
     layer.on({
@@ -158,7 +197,6 @@ function setupFeatureEvents(feature, layer, type) {
 }
 
 function selectFeature(feature, layer, type) {
-    // Reset previous selection style
     if (selectedFeatureLayer) {
         if (selectedFeatureType === 'polygon' && polygonLayer) {
             polygonLayer.resetStyle(selectedFeatureLayer);
@@ -170,7 +208,6 @@ function selectFeature(feature, layer, type) {
     selectedFeatureLayer = layer;
     selectedFeatureType = type;
 
-    // Apply Highlight Style
     if (type === 'polygon') {
         layer.setStyle({ color: "#fbbf24", weight: 3, fillColor: "#fef3c7", fillOpacity: 0.7 });
     } else if (type === 'line') {
@@ -179,7 +216,6 @@ function selectFeature(feature, layer, type) {
 
     layer.bringToFront();
 
-    // Zoom to feature
     if (layer.getBounds) {
         map.fitBounds(layer.getBounds(), { maxZoom: 18 });
     }
@@ -188,7 +224,7 @@ function selectFeature(feature, layer, type) {
 }
 
 // =====================================================
-// DASHBOARD DETAILS DISPLAY
+// DASHBOARD DETAILS
 // =====================================================
 function showFeatureDashboard(properties, type) {
     let title = type === 'polygon' ? "🌾 Parcel / Gat Details" : "🛣️ Road / Line Details";
@@ -275,7 +311,7 @@ function clearMapLayers() {
 }
 
 // =====================================================
-// DIRECT PC GEOJSON FILE UPLOAD LOGIC
+// MANUAL LOCAL GEOJSON UPLOAD
 // =====================================================
 if (geojsonInput) {
     geojsonInput.addEventListener("change", function (e) {
@@ -332,7 +368,7 @@ if (geojsonInput) {
                 `;
 
             } catch (err) {
-                alert("Failed to read GeoJSON file. Please upload a valid GeoJSON file.");
+                alert("Failed to read GeoJSON file.");
                 console.error(err);
             }
         };
