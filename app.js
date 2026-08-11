@@ -27,7 +27,7 @@ const infoPanel = document.getElementById("infoPanel");
 const geojsonInput = document.getElementById("geojsonInput");
 
 // =====================================================
-// MAP INITIALIZATION & SWITCHER
+// MAP INITIALIZATION & BASEMAPS
 // =====================================================
 const map = L.map("map").setView([20.9374, 77.7796], 8);
 
@@ -58,7 +58,7 @@ const baseLayers = {
 L.control.layers(baseLayers, null, { position: "topright" }).addTo(map);
 
 // =====================================================
-// ROAD LINE SYMBOLOGY
+// ROAD LINE SYMBOLOGY (AUTOMATIC STYLING BY TYPE)
 // =====================================================
 function getRoadLineStyle(feature) {
     const props = feature.properties || {};
@@ -68,13 +68,13 @@ function getRoadLineStyle(feature) {
     ).toLowerCase();
 
     if (typeStr.includes("tar") || typeStr.includes("pakka") || typeStr.includes("highway") || typeStr.includes("main")) {
-        return { color: "#dc2626", weight: 4, opacity: 0.9 }; 
+        return { color: "#dc2626", weight: 4, opacity: 0.9 }; // Red Solid (Pakka Road)
     } else if (typeStr.includes("kachha") || typeStr.includes("cart") || typeStr.includes("gravel")) {
-        return { color: "#d97706", weight: 3, dashArray: "6, 6", opacity: 0.9 }; 
+        return { color: "#d97706", weight: 3, dashArray: "6, 6", opacity: 0.9 }; // Dashed Orange (Kachha Road)
     } else if (typeStr.includes("foot") || typeStr.includes("path") || typeStr.includes("paya")) {
-        return { color: "#475569", weight: 2, dashArray: "2, 5", opacity: 0.85 }; 
+        return { color: "#475569", weight: 2, dashArray: "2, 5", opacity: 0.85 }; // Dotted Grey (Footpath)
     } else if (typeStr.includes("nala") || typeStr.includes("river") || typeStr.includes("water")) {
-        return { color: "#0284c7", weight: 3, opacity: 0.9 }; 
+        return { color: "#0284c7", weight: 3, opacity: 0.9 }; // Blue Line (Waterway)
     }
 
     return { color: "#e11d48", weight: 3, opacity: 0.85 };
@@ -132,7 +132,7 @@ async function fetchRepoFoldersRealTime() {
     } catch (err) {
         console.error("Error fetching repository tree:", err);
         districtSelect.innerHTML = `<option value="">Failed to load folders</option>`;
-        alert("Failed to load real-time folder data from GitHub.");
+        alert("Failed to load folder data from GitHub.");
     }
 }
 
@@ -228,8 +228,9 @@ async function loadVillageMap() {
 
         if (hasLoadedData) {
             showInitialDashboardInfo(d, t, v);
+            map.invalidateSize();
         } else {
-            alert(`No polygon or line GeoJSON files found for "${v}".`);
+            alert(`No GeoJSON map files found for "${v}".`);
         }
 
     } catch (error) {
@@ -239,13 +240,13 @@ async function loadVillageMap() {
 }
 
 // =====================================================
-// MAP CLICK & PARCEL TEXT LABELS (ONLY "Text" FIELD)
+// MAP CLICK & PARCEL TEXT LABELS (STRICTLY "Text" ATTRIBUTE)
 // =====================================================
 function setupFeatureEvents(feature, layer, type) {
     if (type === 'polygon' && feature.properties) {
         let labelText = "";
 
-        // Strictly check for "Text" or "text" attribute only
+        // Strictly search only for "Text" or "text" key
         for (let key of Object.keys(feature.properties)) {
             if (key.toLowerCase() === "text") {
                 labelText = feature.properties[key];
@@ -331,7 +332,7 @@ function showInitialDashboardInfo(d, t, v) {
 }
 
 // =====================================================
-// SEARCH FUNCTIONALITY (STRICTLY SEARCHES ONLY "Text" ATTRIBUTE)
+// SEARCH FUNCTIONALITY (STRICTLY SEARCHES ONLY "Text" FIELD)
 // =====================================================
 searchBtn.addEventListener("click", searchSurveyNumber);
 surveySearch.addEventListener("keydown", (e) => { if (e.key === "Enter") searchSurveyNumber(); });
@@ -349,12 +350,11 @@ function searchSurveyNumber() {
         const props = layer.feature.properties;
         if (!props) return;
 
-        // ONLY check the "Text" field (case-insensitive)
+        // ONLY check the "Text" field
         for (let key of Object.keys(props)) {
             if (key.toLowerCase() === "text") {
                 const valStr = String(props[key]).trim().toLowerCase();
                 
-                // Matches exact (e.g. "8/1") or main number (e.g., searching "8" matches "8/1" or "8")
                 if (valStr === rawSearch || valStr.split('/')[0] === rawSearch || valStr.split('-')[0] === rawSearch) {
                     targetLayer = layer;
                     return;
@@ -443,6 +443,8 @@ if (geojsonInput) {
                     map.fitBounds(boundsGroup.getBounds(), { padding: [20, 20] });
                 }
 
+                map.invalidateSize();
+
                 infoPanel.innerHTML = `
                     <h2>📁 Uploaded File</h2>
                     <div class="info-row"><span class="info-label">File Name</span><span class="info-value">${file.name}</span></div>
@@ -458,3 +460,14 @@ if (geojsonInput) {
         reader.readAsText(file);
     });
 }
+
+// =====================================================
+// MOBILE MAP AUTO-RESIZE FIX
+// =====================================================
+window.addEventListener("resize", () => {
+    if (map) map.invalidateSize();
+});
+
+setTimeout(() => {
+    if (map) map.invalidateSize();
+}, 600);
