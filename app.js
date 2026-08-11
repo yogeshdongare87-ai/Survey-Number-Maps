@@ -6,7 +6,8 @@ const GITHUB_REPO = "Survey-Number-Maps";
 const GITHUB_BRANCH = "main"; // Change to 'master' if your repo branch is named master
 
 // GitHub Raw URL for fetching json files
-const BASE_URL = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/${GITHUB_BRANCH}/data`;
+// Uses the direct folder relative to your GitHub Pages site
+const BASE_URL = "./data";
 
 // Note: If hosting directly on GitHub Pages with index.html in the same repo,
 // you can also use relative path: const BASE_URL = "./data";
