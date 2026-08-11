@@ -3,9 +3,8 @@
 // =====================================================
 const GITHUB_USERNAME = "yogeshdongare87-ai";
 const GITHUB_REPO = "Survey-Number-Maps";
-const GITHUB_BRANCH = "main"; // Fallback to 'master' automatically if main not found
+const GITHUB_BRANCH = "main"; 
 
-// Relative base path for loading local/hosted GeoJSON assets
 const MAPS_BASE_PATH = "./data/maps";
 
 // Global State
@@ -28,33 +27,28 @@ const infoPanel = document.getElementById("infoPanel");
 const geojsonInput = document.getElementById("geojsonInput");
 
 // =====================================================
-// MAP INITIALIZATION & TILE LAYER SWITCHER
+// MAP INITIALIZATION & SWITCHER
 // =====================================================
 const map = L.map("map").setView([20.9374, 77.7796], 8);
 
-// 1. Standard OpenStreetMap Layer
 const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 20,
     attribution: "© OpenStreetMap contributors"
 });
 
-// 2. Google Satellite Hybrid Map Layer (Satellite + Road Labels)
 const googleSatLayer = L.tileLayer("https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}", {
     maxZoom: 20,
     subdomains: ["mt0", "mt1", "mt2", "mt3"],
     attribution: "© Google Maps"
 });
 
-// 3. Esri World Imagery Satellite Layer
 const esriSatLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
     maxZoom: 19,
     attribution: "Tiles © Esri"
 });
 
-// Default active layer: Google Satellite
 googleSatLayer.addTo(map);
 
-// Top-Right Corner Layer Switcher
 const baseLayers = {
     "🛰️ Satellite Map (Google)": googleSatLayer,
     "🌍 Satellite Map (Esri)": esriSatLayer,
@@ -64,7 +58,32 @@ const baseLayers = {
 L.control.layers(baseLayers, null, { position: "topright" }).addTo(map);
 
 // =====================================================
-// REAL-TIME REPOSITORY DISCOVERY (GitHub Trees API)
+// ROAD LINE SYMBOLOGY (AUTOMATIC STYLING BY ROAD TYPE)
+// =====================================================
+function getRoadLineStyle(feature) {
+    const props = feature.properties || {};
+    
+    // Check all possible type attributes in GeoJSON
+    const typeStr = String(
+        props.type || props.road_type || props.rasta_type || props.class || props.category || props.name || ""
+    ).toLowerCase();
+
+    if (typeStr.includes("tar") || typeStr.includes("pakka") || typeStr.includes("highway") || typeStr.includes("main")) {
+        return { color: "#dc2626", weight: 4, opacity: 0.9 }; // Red Solid Line (Pakka Road)
+    } else if (typeStr.includes("kachha") || typeStr.includes("cart") || typeStr.includes("gravel")) {
+        return { color: "#d97706", weight: 3, dashArray: "6, 6", opacity: 0.9 }; // Dashed Orange Line (Kachha Road)
+    } else if (typeStr.includes("foot") || typeStr.includes("path") || typeStr.includes("paya")) {
+        return { color: "#475569", weight: 2, dashArray: "2, 5", opacity: 0.85 }; // Dotted Line (Footpath)
+    } else if (typeStr.includes("nala") || typeStr.includes("river") || typeStr.includes("water")) {
+        return { color: "#0284c7", weight: 3, opacity: 0.9 }; // Blue Line (Nala / Waterway)
+    }
+
+    // Default Road Line Style
+    return { color: "#e11d48", weight: 3, opacity: 0.85 };
+}
+
+// =====================================================
+// REAL-TIME REPOSITORY DISCOVERY
 // =====================================================
 async function fetchRepoFoldersRealTime() {
     districtSelect.innerHTML = `<option value="">Loading real-time folders...</option>`;
@@ -74,7 +93,6 @@ async function fetchRepoFoldersRealTime() {
     try {
         let res = await fetch(url);
 
-        // Fallback to 'master' branch if 'main' returns 404
         if (!res.ok && res.status === 404) {
             url = `https://api.github.com/repos/${GITHUB_USERNAME}/${GITHUB_REPO}/git/trees/master?recursive=1`;
             res = await fetch(url);
@@ -85,7 +103,6 @@ async function fetchRepoFoldersRealTime() {
         const data = await res.json();
         locationData = {};
 
-        // Parse path: data/maps/District/Taluka/Village/FileName.geojson
         data.tree.forEach(item => {
             const parts = item.path.split("/");
 
@@ -121,7 +138,6 @@ async function fetchRepoFoldersRealTime() {
     }
 }
 
-// Populate District Dropdown
 function populateDistricts() {
     districtSelect.innerHTML = `<option value="">Select District</option>`;
     const districts = Object.keys(locationData).sort();
@@ -136,7 +152,6 @@ function populateDistricts() {
     });
 }
 
-// Cascading Dropdown Listeners
 districtSelect.addEventListener("change", function () {
     talukaSelect.innerHTML = `<option value="">Select Taluka</option>`;
     villageSelect.innerHTML = `<option value="">Select Village</option>`;
@@ -167,9 +182,7 @@ villageSelect.addEventListener("change", function () {
     loadMapBtn.disabled = !this.value;
 });
 
-// Run folder discovery on page load
 fetchRepoFoldersRealTime();
-
 loadMapBtn.addEventListener("click", loadVillageMap);
 
 // =====================================================
@@ -189,7 +202,7 @@ async function loadVillageMap() {
     let hasLoadedData = false;
 
     try {
-        // Load Polygon Layer (Parcels / Land)
+        // Load Polygon Layer (Parcels)
         if (villageInfo.polygonFile) {
             const polyRes = await fetch(`${folderPath}/${encodeURIComponent(villageInfo.polygonFile)}`);
             if (polyRes.ok) {
@@ -204,13 +217,13 @@ async function loadVillageMap() {
             }
         }
 
-        // Load Line Layer (Roads / Rasta)
+        // Load Line Layer (Roads with Symbology)
         if (villageInfo.lineFile) {
             const lineRes = await fetch(`${folderPath}/${encodeURIComponent(villageInfo.lineFile)}`);
             if (lineRes.ok) {
                 const lineData = await lineRes.json();
                 lineLayer = L.geoJSON(lineData, {
-                    style: { color: "#e11d48", weight: 3 },
+                    style: (feature) => getRoadLineStyle(feature), // Symbology applied here
                     onEachFeature: (feature, layer) => setupFeatureEvents(feature, layer, 'line')
                 }).addTo(map);
                 hasLoadedData = true;
@@ -220,7 +233,7 @@ async function loadVillageMap() {
         if (hasLoadedData) {
             showInitialDashboardInfo(d, t, v);
         } else {
-            alert(`No polygon or line GeoJSON files could be loaded for "${v}".`);
+            alert(`No polygon or line GeoJSON files found for "${v}".`);
         }
 
     } catch (error) {
@@ -230,10 +243,9 @@ async function loadVillageMap() {
 }
 
 // =====================================================
-// MAP CLICK & PERMANENT PARCEL TEXT LABELS
+// MAP CLICK & PERMANENT PARCEL LABELS
 // =====================================================
 function setupFeatureEvents(feature, layer, type) {
-    // 1. Permanent Parcel Text Labeling
     if (type === 'polygon' && feature.properties) {
         const searchFields = ["gat_no", "gat", "survey_no", "surveynumber", "gatno", "surveyno"];
         let labelText = "";
@@ -252,14 +264,13 @@ function setupFeatureEvents(feature, layer, type) {
 
         if (labelText) {
             layer.bindTooltip(String(labelText), {
-                permanent: true,       // Permanent text label
-                direction: "center",    // Displayed in parcel center
+                permanent: true,
+                direction: "center",
                 className: "parcel-label"
             });
         }
     }
 
-    // 2. Feature Click Listener
     layer.on({
         click: function (e) {
             L.DomEvent.stopPropagation(e);
@@ -329,35 +340,42 @@ function showInitialDashboardInfo(d, t, v) {
 }
 
 // =====================================================
-// SEARCH FUNCTIONALITY
+// ACCURATE SEARCH FUNCTIONALITY (CHECKS ALL ATTRIBUTES)
 // =====================================================
 searchBtn.addEventListener("click", searchSurveyNumber);
 surveySearch.addEventListener("keydown", (e) => { if (e.key === "Enter") searchSurveyNumber(); });
 
 function searchSurveyNumber() {
-    const searchValue = surveySearch.value.trim().toLowerCase();
-    if (!searchValue) return alert("Enter Survey / Gat Number.");
+    const rawSearch = surveySearch.value.trim().toLowerCase();
+    if (!rawSearch) return alert("Enter Survey / Gat Number.");
     if (!polygonLayer) return alert("Please load a village map first.");
 
-    let found = false;
-    const searchFields = ["gat_no", "gat", "survey_no", "surveynumber", "gatno", "surveyno"];
+    let targetLayer = null;
 
     polygonLayer.eachLayer(layer => {
+        if (targetLayer) return;
+
         const props = layer.feature.properties;
         if (!props) return;
 
-        for (let key of Object.keys(props)) {
-            if (searchFields.includes(key.toLowerCase())) {
-                if (String(props[key]).trim().toLowerCase() === searchValue) {
-                    selectFeature(layer.feature, layer, 'polygon');
-                    found = true;
-                    return;
-                }
+        for (let [key, val] of Object.entries(props)) {
+            if (val === null || val === undefined) continue;
+
+            const valStr = String(val).trim().toLowerCase();
+            
+            // Check exact match or sub-number match (e.g., "20" matching "20/1")
+            if (valStr === rawSearch || valStr.split('/')[0] === rawSearch || valStr.split('-')[0] === rawSearch) {
+                targetLayer = layer;
+                break;
             }
         }
     });
 
-    if (!found) alert(`Survey/Gat Number "${surveySearch.value}" not found.`);
+    if (targetLayer) {
+        selectFeature(targetLayer.feature, targetLayer, 'polygon');
+    } else {
+        alert(`Survey/Gat Number "${surveySearch.value}" not found in loaded map.`);
+    }
 }
 
 clearBtn.addEventListener("click", function () {
@@ -383,7 +401,7 @@ function clearMapLayers() {
 }
 
 // =====================================================
-// LOCAL GEOJSON FILE UPLOAD (FALLBACK)
+// LOCAL FILE UPLOAD (FALLBACK)
 // =====================================================
 if (geojsonInput) {
     geojsonInput.addEventListener("change", function (e) {
@@ -419,7 +437,7 @@ if (geojsonInput) {
 
                 if (lineFeatures.length > 0) {
                     lineLayer = L.geoJSON({ type: "FeatureCollection", features: lineFeatures }, {
-                        style: { color: "#e11d48", weight: 3 },
+                        style: (feature) => getRoadLineStyle(feature),
                         onEachFeature: (feature, layer) => setupFeatureEvents(feature, layer, 'line')
                     }).addTo(map);
                 }
