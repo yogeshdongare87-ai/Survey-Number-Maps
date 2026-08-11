@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Survey & Road Map Viewer</title>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="header">
+    <div>
+        <h1>🗺️ Survey & Road Map Viewer</h1>
+        <p>Explore District, Taluka, and Village Parcel & Road Data</p>
+    </div>
+</header>
+
+<div class="main-container">
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar">
+        <div class="card">
+            <h2>📍 Location Search</h2>
+            
+            <label for="districtSelect">District</label>
+            <select id="districtSelect"><option value="">Select District</option></select>
+
+            <label for="talukaSelect">Taluka</label>
+            <select id="talukaSelect" disabled><option value="">Select Taluka</option></select>
+
+            <label for="villageSelect">Village</label>
+            <select id="villageSelect" disabled><option value="">Select Village</option></select>
+
+            <button id="loadMapBtn" disabled>🌍 Load Map</button>
+        </div>
+
+        <div class="card">
+            <h2>🔍 Survey / Gat Search</h2>
+            <input type="text" id="surveySearch" placeholder="Enter Survey / Gat No.">
+            <div class="btn-group">
+                <button id="searchBtn" class="btn-primary">Search</button>
+                <button id="clearBtn" class="btn-secondary">Clear</button>
+            </div>
+        </div>
+
+        <!-- INFORMATION DASHBOARD -->
+        <div class="card info-card" id="infoPanel">
+            <h2>📋 Dashboard Details</h2>
+            <div class="empty-state">
+                Select a parcel (land) or road on the map to see details here.
+            </div>
+        </div>
+    </aside>
+
+    <!-- ================= MAP ================= -->
+    <main id="map"></main>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
