@@ -1,3 +1,27 @@
+/* Mobile Screen Optimization */
+@media (max-width: 768px) {
+    body {
+        flex-direction: column;
+    }
+
+    /* Search & Dashboard Panel Top/Bottom Adjustment */
+    .sidebar, #infoPanel {
+        width: 100% !important;
+        max-height: 40vh;
+        overflow-y: auto;
+    }
+
+    /* Map Height Adjustment */
+    #map {
+        width: 100% !important;
+        height: 60vh !important;
+    }
+
+    /* Touch Friendly Parcel Label */
+    .parcel-label {
+        font-size: 10px;
+    }
+}
 :root {
     --primary: #4f46e5;
     --primary-hover: #4338ca;
