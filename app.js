@@ -58,27 +58,25 @@ const baseLayers = {
 L.control.layers(baseLayers, null, { position: "topright" }).addTo(map);
 
 // =====================================================
-// ROAD LINE SYMBOLOGY (AUTOMATIC STYLING BY ROAD TYPE)
+// ROAD LINE SYMBOLOGY
 // =====================================================
 function getRoadLineStyle(feature) {
     const props = feature.properties || {};
     
-    // Check all possible type attributes in GeoJSON
     const typeStr = String(
         props.type || props.road_type || props.rasta_type || props.class || props.category || props.name || ""
     ).toLowerCase();
 
     if (typeStr.includes("tar") || typeStr.includes("pakka") || typeStr.includes("highway") || typeStr.includes("main")) {
-        return { color: "#dc2626", weight: 4, opacity: 0.9 }; // Red Solid Line (Pakka Road)
+        return { color: "#dc2626", weight: 4, opacity: 0.9 }; 
     } else if (typeStr.includes("kachha") || typeStr.includes("cart") || typeStr.includes("gravel")) {
-        return { color: "#d97706", weight: 3, dashArray: "6, 6", opacity: 0.9 }; // Dashed Orange Line (Kachha Road)
+        return { color: "#d97706", weight: 3, dashArray: "6, 6", opacity: 0.9 }; 
     } else if (typeStr.includes("foot") || typeStr.includes("path") || typeStr.includes("paya")) {
-        return { color: "#475569", weight: 2, dashArray: "2, 5", opacity: 0.85 }; // Dotted Line (Footpath)
+        return { color: "#475569", weight: 2, dashArray: "2, 5", opacity: 0.85 }; 
     } else if (typeStr.includes("nala") || typeStr.includes("river") || typeStr.includes("water")) {
-        return { color: "#0284c7", weight: 3, opacity: 0.9 }; // Blue Line (Nala / Waterway)
+        return { color: "#0284c7", weight: 3, opacity: 0.9 }; 
     }
 
-    // Default Road Line Style
     return { color: "#e11d48", weight: 3, opacity: 0.85 };
 }
 
@@ -202,7 +200,6 @@ async function loadVillageMap() {
     let hasLoadedData = false;
 
     try {
-        // Load Polygon Layer (Parcels)
         if (villageInfo.polygonFile) {
             const polyRes = await fetch(`${folderPath}/${encodeURIComponent(villageInfo.polygonFile)}`);
             if (polyRes.ok) {
@@ -217,13 +214,12 @@ async function loadVillageMap() {
             }
         }
 
-        // Load Line Layer (Roads with Symbology)
         if (villageInfo.lineFile) {
             const lineRes = await fetch(`${folderPath}/${encodeURIComponent(villageInfo.lineFile)}`);
             if (lineRes.ok) {
                 const lineData = await lineRes.json();
                 lineLayer = L.geoJSON(lineData, {
-                    style: (feature) => getRoadLineStyle(feature), // Symbology applied here
+                    style: (feature) => getRoadLineStyle(feature),
                     onEachFeature: (feature, layer) => setupFeatureEvents(feature, layer, 'line')
                 }).addTo(map);
                 hasLoadedData = true;
@@ -243,23 +239,30 @@ async function loadVillageMap() {
 }
 
 // =====================================================
-// MAP CLICK & PERMANENT PARCEL LABELS
+// MAP CLICK & PARCEL TEXT LABELS (PRIORITIZES "Text" ATTRIBUTE)
 // =====================================================
 function setupFeatureEvents(feature, layer, type) {
     if (type === 'polygon' && feature.properties) {
-        const searchFields = ["gat_no", "gat", "survey_no", "surveynumber", "gatno", "surveyno"];
+        // Priority list: "text" is checked first before anything else
+        const labelFields = ["text", "gat_no", "gat", "survey_no", "surveynumber", "gatno", "surveyno"];
         let labelText = "";
 
         for (let key of Object.keys(feature.properties)) {
-            if (searchFields.includes(key.toLowerCase())) {
+            if (labelFields.includes(key.toLowerCase())) {
                 labelText = feature.properties[key];
                 break;
             }
         }
 
+        // Ignore technical fields like FID, TARGET_FID when falling back
         if (!labelText) {
-            const keys = Object.keys(feature.properties);
-            if (keys.length > 0) labelText = feature.properties[keys[0]];
+            const ignoredFields = ["fid", "target_fid", "join_count", "lgd_code", "vill_code", "layer", "objectid"];
+            for (let key of Object.keys(feature.properties)) {
+                if (!ignoredFields.includes(key.toLowerCase())) {
+                    labelText = feature.properties[key];
+                    break;
+                }
+            }
         }
 
         if (labelText) {
@@ -311,7 +314,7 @@ function selectFeature(feature, layer, type) {
 // =====================================================
 function showFeatureDashboard(properties, type) {
     let title = type === 'polygon' ? "🌾 Parcel / Gat Details" : "🛣️ Road / Line Details";
-    infoPanel.innerHTML = `<h2>${title}</h2>`;
+    infoPanel.innerHTML = `2>${title}</h2>`;
 
     if (!properties || Object.keys(properties).length === 0) {
         infoPanel.innerHTML += `<div class="empty-state">No detailed attributes available for this feature.</div>`;
@@ -340,7 +343,7 @@ function showInitialDashboardInfo(d, t, v) {
 }
 
 // =====================================================
-// ACCURATE SEARCH FUNCTIONALITY (CHECKS ALL ATTRIBUTES)
+// SEARCH FUNCTIONALITY (TARGETS "Text" & IGNORES FID)
 // =====================================================
 searchBtn.addEventListener("click", searchSurveyNumber);
 surveySearch.addEventListener("keydown", (e) => { if (e.key === "Enter") searchSurveyNumber(); });
@@ -351,6 +354,7 @@ function searchSurveyNumber() {
     if (!polygonLayer) return alert("Please load a village map first.");
 
     let targetLayer = null;
+    const targetFields = ["text", "gat_no", "gat", "survey_no", "surveynumber", "gatno", "surveyno"];
 
     polygonLayer.eachLayer(layer => {
         if (targetLayer) return;
@@ -358,15 +362,30 @@ function searchSurveyNumber() {
         const props = layer.feature.properties;
         if (!props) return;
 
-        for (let [key, val] of Object.entries(props)) {
-            if (val === null || val === undefined) continue;
+        // Step 1: Specifically search inside "Text" or primary survey fields
+        for (let key of Object.keys(props)) {
+            if (targetFields.includes(key.toLowerCase())) {
+                const valStr = String(props[key]).trim().toLowerCase();
+                
+                // Matches exact (e.g. "8/1") or main number (e.g. searching "8" matches "8/1")
+                if (valStr === rawSearch || valStr.split('/')[0] === rawSearch || valStr.split('-')[0] === rawSearch) {
+                    targetLayer = layer;
+                    return;
+                }
+            }
+        }
 
-            const valStr = String(val).trim().toLowerCase();
-            
-            // Check exact match or sub-number match (e.g., "20" matching "20/1")
-            if (valStr === rawSearch || valStr.split('/')[0] === rawSearch || valStr.split('-')[0] === rawSearch) {
-                targetLayer = layer;
-                break;
+        // Step 2: Fallback to other attributes, excluding technical ID fields
+        if (!targetLayer) {
+            const ignoredFields = ["fid", "target_fid", "join_count", "lgd_code", "vill_code", "layer", "objectid"];
+            for (let [key, val] of Object.entries(props)) {
+                if (val === null || val === undefined || ignoredFields.includes(key.toLowerCase())) continue;
+
+                const valStr = String(val).trim().toLowerCase();
+                if (valStr === rawSearch || valStr.split('/')[0] === rawSearch || valStr.split('-')[0] === rawSearch) {
+                    targetLayer = layer;
+                    return;
+                }
             }
         }
     });
