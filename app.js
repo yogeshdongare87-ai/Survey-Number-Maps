@@ -396,3 +396,38 @@ if (geojsonInput) {
         reader.readAsText(file);
     });
 }
+// =====================================================
+// MAP INITIALIZATION WITH SATELLITE VIEW
+// =====================================================
+const map = L.map("map").setView([20.9374, 77.7796], 8);
+
+// 1. Standard OpenStreetMap
+const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 20,
+    attribution: "© OpenStreetMap contributors"
+});
+
+// 2. Google Satellite View (Hybrid - Satellite + Labels)
+const googleSatLayer = L.tileLayer("https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}", {
+    maxZoom: 20,
+    subdomains: ["mt0", "mt1", "mt2", "mt3"],
+    attribution: "© Google Maps"
+});
+
+// 3. Esri World Imagery (High Resolution Satellite)
+const esriSatLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    maxZoom: 19,
+    attribution: "Tiles © Esri"
+});
+
+// Set default map view to Google Satellite
+googleSatLayer.addTo(map);
+
+// Add Top-Right Switcher Control
+const baseLayers = {
+    "🛰️ Satellite Map (Google)": googleSatLayer,
+    "🌍 Satellite Map (Esri)": esriSatLayer,
+    "🗺️ Standard Map": osmLayer
+};
+
+L.control.layers(baseLayers, null, { position: "topright" }).addTo(map);
