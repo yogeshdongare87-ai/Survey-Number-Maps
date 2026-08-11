@@ -2,94 +2,68 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Survey & Road Map Viewer</title>
-
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Survey & Road Map Viewer</title>
+    
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    <!-- Custom CSS -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- Header -->
-    <header class="app-header">
+<header class="header">
+    <div>
         <h1>🗺️ Survey & Road Map Viewer</h1>
         <p>Explore District, Taluka, and Village Parcel & Road Data</p>
-    </header>
-
-    <!-- Main Container -->
-    <div class="main-container">
-        
-        <!-- Sidebar Controls -->
-        <aside class="sidebar">
-            
-            <!-- Location Search Card -->
-            <div class="card">
-                <h3>📍 Location Search</h3>
-                <div class="form-group">
-                    <label for="districtSelect">District</label>
-                    <select id="districtSelect">
-                        <option value="">Select District</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="talukaSelect">Taluka</label>
-                    <select id="talukaSelect" disabled>
-                        <option value="">Select Taluka</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="villageSelect">Village</label>
-                    <select id="villageSelect" disabled>
-                        <option value="">Select Village</option>
-                    </select>
-                </div>
-
-                <button id="loadMapBtn" class="btn btn-primary" disabled>🌐 Load Map</button>
-            </div>
-
-            <!-- Survey Number Search Card -->
-            <div class="card">
-                <h3>🔍 Survey / Gat Search</h3>
-                <div class="form-group">
-                    <input type="text" id="surveySearch" placeholder="Enter Survey/Gat No (e.g. 20, 8/1)">
-                </div>
-                <div class="btn-group">
-                    <button id="searchBtn" class="btn btn-primary">Search</button>
-                    <button id="clearBtn" class="btn btn-secondary">Clear</button>
-                </div>
-            </div>
-
-            <!-- File Upload Card -->
-            <div class="card">
-                <h3>📁 Local GeoJSON Upload</h3>
-                <input type="file" id="geojsonInput" accept=".geojson, .json">
-            </div>
-
-            <!-- Details Dashboard Card -->
-            <div class="card" id="infoPanel">
-                <h2>📋 Dashboard Details</h2>
-                <div class="empty-state">Select a parcel (land) or road on the map to see details here.</div>
-            </div>
-
-        </aside>
-
-        <!-- Map Container -->
-        <main id="map"></main>
-
     </div>
+</header>
 
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
-    <!-- Custom JS -->
-    <script src="app.js"></script>
+<div class="main-container">
+    <!-- ================= SIDEBAR ================= -->
+    <aside class="sidebar">
+        <div class="card">
+            <h2>📍 Location Search</h2>
+            
+            <label for="districtSelect">District</label>
+            <select id="districtSelect"><option value="">Select District</option></select>
+
+            <label for="talukaSelect">Taluka</label>
+            <select id="talukaSelect" disabled><option value="">Select Taluka</option></select>
+
+            <label for="villageSelect">Village</label>
+            <select id="villageSelect" disabled><option value="">Select Village</option></select>
+
+            <button id="loadMapBtn" disabled>🌍 Load Map</button>
+        </div>
+
+        <div class="card">
+            <h2>🔍 Survey / Gat Search</h2>
+            <input type="text" id="surveySearch" placeholder="Enter Survey / Gat No.">
+            <div class="btn-group">
+                <button id="searchBtn" class="btn-primary">Search</button>
+                <button id="clearBtn" class="btn-secondary">Clear</button>
+            </div>
+        </div>
+
+        <!-- INFORMATION DASHBOARD -->
+        <div class="card info-card" id="infoPanel">
+            <h2>📋 Dashboard Details</h2>
+            <div class="empty-state">
+                Select a parcel (land) or road on the map to see details here.
+            </div>
+        </div>
+    </aside>
+
+    <!-- ================= MAP ================= -->
+    <main id="map"></main>
+</div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+
 </body>
 </html>
