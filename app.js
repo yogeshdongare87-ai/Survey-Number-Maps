@@ -1,12 +1,15 @@
 // =====================================================
-// GITHUB RAW BASE URL CONFIGURATION
-// Replace 'username' and 'repo-name' with your GitHub details.
+// GITHUB REPOSITORY CONFIGURATION
 // =====================================================
 const GITHUB_USERNAME = "yogeshdongare87-ai";
 const GITHUB_REPO = "Survey-Number-Maps";
-const GITHUB_BRANCH = "main"; // or 'master' depending on your default branch
+const GITHUB_BRANCH = "main"; // Change to 'master' if your repo branch is named master
 
+// GitHub Raw URL for fetching json files
 const BASE_URL = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/${GITHUB_BRANCH}/data`;
+
+// Note: If hosting directly on GitHub Pages with index.html in the same repo,
+// you can also use relative path: const BASE_URL = "./data";
 
 let locationData = {};
 let polygonLayer = null;
@@ -15,6 +18,7 @@ let pointLayer = null;
 let selectedFeatureLayer = null;
 let selectedFeatureType = null;
 
+// DOM Elements
 const districtSelect = document.getElementById("districtSelect");
 const talukaSelect = document.getElementById("talukaSelect");
 const villageSelect = document.getElementById("villageSelect");
@@ -23,6 +27,7 @@ const surveySearch = document.getElementById("surveySearch");
 const searchBtn = document.getElementById("searchBtn");
 const clearBtn = document.getElementById("clearBtn");
 const infoPanel = document.getElementById("infoPanel");
+const geojsonInput = document.getElementById("geojsonInput");
 
 // =====================================================
 // MAP INITIALIZATION
@@ -38,7 +43,7 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 // =====================================================
 fetch(`${BASE_URL}/locations.json`)
     .then(res => {
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
         return res.json();
     })
     .then(data => {
@@ -46,7 +51,7 @@ fetch(`${BASE_URL}/locations.json`)
         loadDistricts();
     })
     .catch(err => {
-        console.error("Failed to load location data from GitHub:", err);
+        console.error("Failed to load location data:", err);
         alert("Failed to load location dropdowns. Check console for details.");
     });
 
@@ -97,7 +102,7 @@ async function loadVillageMap() {
 
     clearMapLayers();
 
-    // Construct raw GitHub path using encodeURIComponent to encode spaces safely
+    // Construct path with encoded folder names to safely handle spaces
     const folderPath = `${BASE_URL}/maps/${encodeURIComponent(d)}/${encodeURIComponent(t)}/${encodeURIComponent(v)}`;
 
     let hasLoadedData = false;
@@ -111,7 +116,7 @@ async function loadVillageMap() {
                 style: { color: "#4f46e5", weight: 1, fillColor: "#818cf8", fillOpacity: 0.4 },
                 onEachFeature: (feature, layer) => setupFeatureEvents(feature, layer, 'polygon')
             }).addTo(map);
-            
+
             map.fitBounds(polygonLayer.getBounds(), { padding: [20, 20] });
             hasLoadedData = true;
         }
@@ -130,11 +135,207 @@ async function loadVillageMap() {
         if (hasLoadedData) {
             showInitialDashboardInfo(d, t, v);
         } else {
-            alert(`No GeoJSON files found for ${v} in the GitHub repository.`);
+            alert(`No GeoJSON files found for ${v} in the repository.`);
         }
 
     } catch (error) {
         console.error("Error fetching map files:", error);
         alert("Failed to load map layers from GitHub.");
     }
+}
+
+// =====================================================
+// EVENTS FOR POLYGON & LINE CLICK
+// =====================================================
+function setupFeatureEvents(feature, layer, type) {
+    layer.on({
+        click: function (e) {
+            L.DomEvent.stopPropagation(e);
+            selectFeature(feature, layer, type);
+        }
+    });
+}
+
+function selectFeature(feature, layer, type) {
+    // Reset previous selection style
+    if (selectedFeatureLayer) {
+        if (selectedFeatureType === 'polygon' && polygonLayer) {
+            polygonLayer.resetStyle(selectedFeatureLayer);
+        } else if (selectedFeatureType === 'line' && lineLayer) {
+            lineLayer.resetStyle(selectedFeatureLayer);
+        }
+    }
+
+    selectedFeatureLayer = layer;
+    selectedFeatureType = type;
+
+    // Apply Highlight Style
+    if (type === 'polygon') {
+        layer.setStyle({ color: "#fbbf24", weight: 3, fillColor: "#fef3c7", fillOpacity: 0.7 });
+    } else if (type === 'line') {
+        layer.setStyle({ color: "#fbbf24", weight: 6 });
+    }
+
+    layer.bringToFront();
+
+    // Zoom to feature
+    if (layer.getBounds) {
+        map.fitBounds(layer.getBounds(), { maxZoom: 18 });
+    }
+
+    showFeatureDashboard(feature.properties, type);
+}
+
+// =====================================================
+// DASHBOARD DETAILS DISPLAY
+// =====================================================
+function showFeatureDashboard(properties, type) {
+    let title = type === 'polygon' ? "🌾 Parcel / Gat Details" : "🛣️ Road / Line Details";
+    infoPanel.innerHTML = `<h2>${title}</h2>`;
+
+    if (!properties || Object.keys(properties).length === 0) {
+        infoPanel.innerHTML += `<div class="empty-state">No detailed information available for this selection.</div>`;
+        return;
+    }
+
+    let html = "";
+    Object.entries(properties).forEach(([key, value]) => {
+        html += `
+        <div class="info-row">
+            <span class="info-label">${key}</span>
+            <span class="info-value">${value !== null ? value : "-"}</span>
+        </div>`;
+    });
+    infoPanel.innerHTML += html;
+}
+
+function showInitialDashboardInfo(d, t, v) {
+    infoPanel.innerHTML = `
+        <h2>🌍 Loaded Area</h2>
+        <div class="info-row"><span class="info-label">District</span><span class="info-value">${d}</span></div>
+        <div class="info-row"><span class="info-label">Taluka</span><span class="info-value">${t}</span></div>
+        <div class="info-row"><span class="info-label">Village</span><span class="info-value">${v}</span></div>
+        <div class="empty-state">👆 Click on any Parcel or Road to view its details here.</div>
+    `;
+}
+
+// =====================================================
+// SEARCH FUNCTIONALITY
+// =====================================================
+searchBtn.addEventListener("click", searchSurveyNumber);
+surveySearch.addEventListener("keydown", (e) => { if (e.key === "Enter") searchSurveyNumber(); });
+
+function searchSurveyNumber() {
+    const searchValue = surveySearch.value.trim().toLowerCase();
+    if (!searchValue) return alert("Enter Survey / Gat Number.");
+    if (!polygonLayer) return alert("Please load a village map first.");
+
+    let found = false;
+    const searchFields = ["gat_no", "gat", "survey_no", "surveynumber", "gatno", "surveyno"];
+
+    polygonLayer.eachLayer(layer => {
+        const props = layer.feature.properties;
+        if (!props) return;
+
+        for (let key of Object.keys(props)) {
+            if (searchFields.includes(key.toLowerCase())) {
+                if (String(props[key]).trim().toLowerCase() === searchValue) {
+                    selectFeature(layer.feature, layer, 'polygon');
+                    found = true;
+                    return;
+                }
+            }
+        }
+    });
+
+    if (!found) alert(`Survey/Gat Number "${surveySearch.value}" not found.`);
+}
+
+clearBtn.addEventListener("click", function () {
+    surveySearch.value = "";
+    if (selectedFeatureLayer) {
+        if (selectedFeatureType === 'polygon' && polygonLayer) polygonLayer.resetStyle(selectedFeatureLayer);
+        if (selectedFeatureType === 'line' && lineLayer) lineLayer.resetStyle(selectedFeatureLayer);
+    }
+    selectedFeatureLayer = null;
+    selectedFeatureType = null;
+    infoPanel.innerHTML = `
+        <h2>📋 Dashboard Details</h2>
+        <div class="empty-state">Select a parcel (land) or road on the map to see details here.</div>
+    `;
+});
+
+function clearMapLayers() {
+    if (polygonLayer) map.removeLayer(polygonLayer);
+    if (lineLayer) map.removeLayer(lineLayer);
+    if (pointLayer) map.removeLayer(pointLayer);
+    polygonLayer = lineLayer = pointLayer = null;
+    selectedFeatureLayer = selectedFeatureType = null;
+}
+
+// =====================================================
+// DIRECT PC GEOJSON FILE UPLOAD LOGIC
+// =====================================================
+if (geojsonInput) {
+    geojsonInput.addEventListener("change", function (e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function (event) {
+            try {
+                const geojsonData = JSON.parse(event.target.result);
+                clearMapLayers();
+
+                const polyFeatures = [];
+                const lineFeatures = [];
+                const features = geojsonData.type === "FeatureCollection" ? geojsonData.features : [geojsonData];
+
+                features.forEach(f => {
+                    if (f.geometry) {
+                        if (f.geometry.type.includes("Line")) {
+                            lineFeatures.push(f);
+                        } else if (f.geometry.type.includes("Polygon")) {
+                            polyFeatures.push(f);
+                        }
+                    }
+                });
+
+                if (polyFeatures.length > 0) {
+                    polygonLayer = L.geoJSON({ type: "FeatureCollection", features: polyFeatures }, {
+                        style: { color: "#4f46e5", weight: 1, fillColor: "#818cf8", fillOpacity: 0.4 },
+                        onEachFeature: (feature, layer) => setupFeatureEvents(feature, layer, 'polygon')
+                    }).addTo(map);
+                }
+
+                if (lineFeatures.length > 0) {
+                    lineLayer = L.geoJSON({ type: "FeatureCollection", features: lineFeatures }, {
+                        style: { color: "#e11d48", weight: 3 },
+                        onEachFeature: (feature, layer) => setupFeatureEvents(feature, layer, 'line')
+                    }).addTo(map);
+                }
+
+                let boundsGroup = L.featureGroup([
+                    ...(polygonLayer ? [polygonLayer] : []),
+                    ...(lineLayer ? [lineLayer] : [])
+                ]);
+
+                if (boundsGroup.getLayers().length > 0) {
+                    map.fitBounds(boundsGroup.getBounds(), { padding: [20, 20] });
+                }
+
+                infoPanel.innerHTML = `
+                    <h2>📁 Uploaded File</h2>
+                    <div class="info-row"><span class="info-label">File Name</span><span class="info-value">${file.name}</span></div>
+                    <div class="empty-state">👆 Click on any Parcel or Road on the map to view details.</div>
+                `;
+
+            } catch (err) {
+                alert("Failed to read GeoJSON file. Please upload a valid GeoJSON file.");
+                console.error(err);
+            }
+        };
+
+        reader.readAsText(file);
+    });
 }
