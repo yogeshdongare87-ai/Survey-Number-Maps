@@ -3,7 +3,7 @@
 // =====================================================
 const GITHUB_USERNAME = "yogeshdongare87-ai";
 const GITHUB_REPO = "Survey-Number-Maps";
-const GITHUB_BRANCH = "main"; // Automatically falls back to 'master' if needed
+const GITHUB_BRANCH = "main"; // Fallback to 'master' automatically if main not found
 
 // Relative base path for loading local/hosted GeoJSON assets
 const MAPS_BASE_PATH = "./data/maps";
@@ -28,17 +28,43 @@ const infoPanel = document.getElementById("infoPanel");
 const geojsonInput = document.getElementById("geojsonInput");
 
 // =====================================================
-// MAP INITIALIZATION
+// MAP INITIALIZATION & TILE LAYER SWITCHER
 // =====================================================
 const map = L.map("map").setView([20.9374, 77.7796], 8);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+
+// 1. Standard OpenStreetMap Layer
+const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 20,
     attribution: "© OpenStreetMap contributors"
-}).addTo(map);
+});
+
+// 2. Google Satellite Hybrid Map Layer (Satellite + Road Labels)
+const googleSatLayer = L.tileLayer("https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}", {
+    maxZoom: 20,
+    subdomains: ["mt0", "mt1", "mt2", "mt3"],
+    attribution: "© Google Maps"
+});
+
+// 3. Esri World Imagery Satellite Layer
+const esriSatLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    maxZoom: 19,
+    attribution: "Tiles © Esri"
+});
+
+// Default active layer: Google Satellite
+googleSatLayer.addTo(map);
+
+// Top-Right Corner Layer Switcher
+const baseLayers = {
+    "🛰️ Satellite Map (Google)": googleSatLayer,
+    "🌍 Satellite Map (Esri)": esriSatLayer,
+    "🗺️ Standard Map": osmLayer
+};
+
+L.control.layers(baseLayers, null, { position: "topright" }).addTo(map);
 
 // =====================================================
 // REAL-TIME REPOSITORY DISCOVERY (GitHub Trees API)
-// Automatically maps dynamic filenames (e.g., 531853_Bhopapur_polygons.geojson)
 // =====================================================
 async function fetchRepoFoldersRealTime() {
     districtSelect.innerHTML = `<option value="">Loading real-time folders...</option>`;
@@ -76,7 +102,6 @@ async function fetchRepoFoldersRealTime() {
                         locationData[district][taluka][village] = { polygonFile: null, lineFile: null };
                     }
 
-                    // Flexible match for polygon or line variations in the filename
                     const lowerName = fileName.toLowerCase();
                     if (lowerName.includes("polygon")) {
                         locationData[district][taluka][village].polygonFile = fileName;
@@ -142,7 +167,7 @@ villageSelect.addEventListener("change", function () {
     loadMapBtn.disabled = !this.value;
 });
 
-// Run folder discovery on script load
+// Run folder discovery on page load
 fetchRepoFoldersRealTime();
 
 loadMapBtn.addEventListener("click", loadVillageMap);
@@ -164,13 +189,13 @@ async function loadVillageMap() {
     let hasLoadedData = false;
 
     try {
-        // Load Polygon Layer (Parcels / Gat)
+        // Load Polygon Layer (Parcels / Land)
         if (villageInfo.polygonFile) {
             const polyRes = await fetch(`${folderPath}/${encodeURIComponent(villageInfo.polygonFile)}`);
             if (polyRes.ok) {
                 const polyData = await polyRes.json();
                 polygonLayer = L.geoJSON(polyData, {
-                    style: { color: "#4f46e5", weight: 1, fillColor: "#818cf8", fillOpacity: 0.4 },
+                    style: { color: "#4f46e5", weight: 1.5, fillColor: "#818cf8", fillOpacity: 0.35 },
                     onEachFeature: (feature, layer) => setupFeatureEvents(feature, layer, 'polygon')
                 }).addTo(map);
 
@@ -205,9 +230,36 @@ async function loadVillageMap() {
 }
 
 // =====================================================
-// MAP CLICK & SELECTION EVENTS
+// MAP CLICK & PERMANENT PARCEL TEXT LABELS
 // =====================================================
 function setupFeatureEvents(feature, layer, type) {
+    // 1. Permanent Parcel Text Labeling
+    if (type === 'polygon' && feature.properties) {
+        const searchFields = ["gat_no", "gat", "survey_no", "surveynumber", "gatno", "surveyno"];
+        let labelText = "";
+
+        for (let key of Object.keys(feature.properties)) {
+            if (searchFields.includes(key.toLowerCase())) {
+                labelText = feature.properties[key];
+                break;
+            }
+        }
+
+        if (!labelText) {
+            const keys = Object.keys(feature.properties);
+            if (keys.length > 0) labelText = feature.properties[keys[0]];
+        }
+
+        if (labelText) {
+            layer.bindTooltip(String(labelText), {
+                permanent: true,       // Permanent text label
+                direction: "center",    // Displayed in parcel center
+                className: "parcel-label"
+            });
+        }
+    }
+
+    // 2. Feature Click Listener
     layer.on({
         click: function (e) {
             L.DomEvent.stopPropagation(e);
@@ -360,7 +412,7 @@ if (geojsonInput) {
 
                 if (polyFeatures.length > 0) {
                     polygonLayer = L.geoJSON({ type: "FeatureCollection", features: polyFeatures }, {
-                        style: { color: "#4f46e5", weight: 1, fillColor: "#818cf8", fillOpacity: 0.4 },
+                        style: { color: "#4f46e5", weight: 1.5, fillColor: "#818cf8", fillOpacity: 0.35 },
                         onEachFeature: (feature, layer) => setupFeatureEvents(feature, layer, 'polygon')
                     }).addTo(map);
                 }
@@ -396,38 +448,3 @@ if (geojsonInput) {
         reader.readAsText(file);
     });
 }
-// =====================================================
-// MAP INITIALIZATION WITH SATELLITE VIEW
-// =====================================================
-const map = L.map("map").setView([20.9374, 77.7796], 8);
-
-// 1. Standard OpenStreetMap
-const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 20,
-    attribution: "© OpenStreetMap contributors"
-});
-
-// 2. Google Satellite View (Hybrid - Satellite + Labels)
-const googleSatLayer = L.tileLayer("https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}", {
-    maxZoom: 20,
-    subdomains: ["mt0", "mt1", "mt2", "mt3"],
-    attribution: "© Google Maps"
-});
-
-// 3. Esri World Imagery (High Resolution Satellite)
-const esriSatLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-    maxZoom: 19,
-    attribution: "Tiles © Esri"
-});
-
-// Set default map view to Google Satellite
-googleSatLayer.addTo(map);
-
-// Add Top-Right Switcher Control
-const baseLayers = {
-    "🛰️ Satellite Map (Google)": googleSatLayer,
-    "🌍 Satellite Map (Esri)": esriSatLayer,
-    "🗺️ Standard Map": osmLayer
-};
-
-L.control.layers(baseLayers, null, { position: "topright" }).addTo(map);
