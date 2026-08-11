@@ -239,29 +239,17 @@ async function loadVillageMap() {
 }
 
 // =====================================================
-// MAP CLICK & PARCEL TEXT LABELS (PRIORITIZES "Text" ATTRIBUTE)
+// MAP CLICK & PARCEL TEXT LABELS (ONLY "Text" FIELD)
 // =====================================================
 function setupFeatureEvents(feature, layer, type) {
     if (type === 'polygon' && feature.properties) {
-        // Priority list: "text" is checked first before anything else
-        const labelFields = ["text", "gat_no", "gat", "survey_no", "surveynumber", "gatno", "surveyno"];
         let labelText = "";
 
+        // Strictly check for "Text" or "text" attribute only
         for (let key of Object.keys(feature.properties)) {
-            if (labelFields.includes(key.toLowerCase())) {
+            if (key.toLowerCase() === "text") {
                 labelText = feature.properties[key];
                 break;
-            }
-        }
-
-        // Ignore technical fields like FID, TARGET_FID when falling back
-        if (!labelText) {
-            const ignoredFields = ["fid", "target_fid", "join_count", "lgd_code", "vill_code", "layer", "objectid"];
-            for (let key of Object.keys(feature.properties)) {
-                if (!ignoredFields.includes(key.toLowerCase())) {
-                    labelText = feature.properties[key];
-                    break;
-                }
             }
         }
 
@@ -314,7 +302,7 @@ function selectFeature(feature, layer, type) {
 // =====================================================
 function showFeatureDashboard(properties, type) {
     let title = type === 'polygon' ? "🌾 Parcel / Gat Details" : "🛣️ Road / Line Details";
-    infoPanel.innerHTML = `2>${title}</h2>`;
+    infoPanel.innerHTML = `<h2>${title}</h2>`;
 
     if (!properties || Object.keys(properties).length === 0) {
         infoPanel.innerHTML += `<div class="empty-state">No detailed attributes available for this feature.</div>`;
@@ -343,7 +331,7 @@ function showInitialDashboardInfo(d, t, v) {
 }
 
 // =====================================================
-// SEARCH FUNCTIONALITY (TARGETS "Text" & IGNORES FID)
+// SEARCH FUNCTIONALITY (STRICTLY SEARCHES ONLY "Text" ATTRIBUTE)
 // =====================================================
 searchBtn.addEventListener("click", searchSurveyNumber);
 surveySearch.addEventListener("keydown", (e) => { if (e.key === "Enter") searchSurveyNumber(); });
@@ -354,7 +342,6 @@ function searchSurveyNumber() {
     if (!polygonLayer) return alert("Please load a village map first.");
 
     let targetLayer = null;
-    const targetFields = ["text", "gat_no", "gat", "survey_no", "surveynumber", "gatno", "surveyno"];
 
     polygonLayer.eachLayer(layer => {
         if (targetLayer) return;
@@ -362,26 +349,12 @@ function searchSurveyNumber() {
         const props = layer.feature.properties;
         if (!props) return;
 
-        // Step 1: Specifically search inside "Text" or primary survey fields
+        // ONLY check the "Text" field (case-insensitive)
         for (let key of Object.keys(props)) {
-            if (targetFields.includes(key.toLowerCase())) {
+            if (key.toLowerCase() === "text") {
                 const valStr = String(props[key]).trim().toLowerCase();
                 
-                // Matches exact (e.g. "8/1") or main number (e.g. searching "8" matches "8/1")
-                if (valStr === rawSearch || valStr.split('/')[0] === rawSearch || valStr.split('-')[0] === rawSearch) {
-                    targetLayer = layer;
-                    return;
-                }
-            }
-        }
-
-        // Step 2: Fallback to other attributes, excluding technical ID fields
-        if (!targetLayer) {
-            const ignoredFields = ["fid", "target_fid", "join_count", "lgd_code", "vill_code", "layer", "objectid"];
-            for (let [key, val] of Object.entries(props)) {
-                if (val === null || val === undefined || ignoredFields.includes(key.toLowerCase())) continue;
-
-                const valStr = String(val).trim().toLowerCase();
+                // Matches exact (e.g. "8/1") or main number (e.g., searching "8" matches "8/1" or "8")
                 if (valStr === rawSearch || valStr.split('/')[0] === rawSearch || valStr.split('-')[0] === rawSearch) {
                     targetLayer = layer;
                     return;
@@ -393,7 +366,7 @@ function searchSurveyNumber() {
     if (targetLayer) {
         selectFeature(targetLayer.feature, targetLayer, 'polygon');
     } else {
-        alert(`Survey/Gat Number "${surveySearch.value}" not found in loaded map.`);
+        alert(`Survey/Gat Number "${surveySearch.value}" not found in Text attribute.`);
     }
 }
 
