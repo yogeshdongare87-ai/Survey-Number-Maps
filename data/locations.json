@@ -1,0 +1,56 @@
+{
+    "Amravati": {
+
+        "Amravati": [
+            "Village_1",
+            "Village_2"
+        ],
+
+        "Morshi": [
+            "Village_3",
+            "Village_4"
+        ],
+
+        "Chandur Railway": [
+            "Village_5",
+            "Village_6"
+        ],
+        
+        "Achalpur": [
+            "531853_Bhopapur",
+            "531854_Devgaon"
+        ]
+
+    },
+
+
+    "Nanded": {
+
+        "Nanded": [
+            "Village_7",
+            "Village_8"
+        ],
+
+        "Ardhapur": [
+            "Village_9",
+            "Village_10"
+        ]
+
+    },
+
+
+    "Nagpur": {
+
+        "Nagpur": [
+            "Village_11",
+            "Village_12"
+        ],
+
+        "Hingna": [
+            "Village_13",
+            "Village_14"
+        ]
+
+    }
+
+}
