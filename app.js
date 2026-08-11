@@ -2,8 +2,8 @@
 // GITHUB RAW BASE URL CONFIGURATION
 // Replace 'username' and 'repo-name' with your GitHub details.
 // =====================================================
-const GITHUB_USERNAME = "YOUR_GITHUB_USERNAME";
-const GITHUB_REPO = "YOUR_REPO_NAME";
+const GITHUB_USERNAME = "yogeshdongare87-ai";
+const GITHUB_REPO = "Survey-Number-Maps";
 const GITHUB_BRANCH = "main"; // or 'master' depending on your default branch
 
 const BASE_URL = `https://raw.githubusercontent.com/${GITHUB_USERNAME}/${GITHUB_REPO}/${GITHUB_BRANCH}/data`;
