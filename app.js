@@ -3,11 +3,12 @@
 // =====================================================
 const GITHUB_USERNAME = "yogeshdongare87-ai";
 const GITHUB_REPO = "Survey-Number-Maps";
-const GITHUB_BRANCH = "main"; // Falls back to 'master' automatically if needed
+const GITHUB_BRANCH = "main"; // Automatically falls back to 'master' if needed
 
-// Relative path for fetching actual GeoJSON files on GitHub Pages
+// Relative base path for loading local/hosted GeoJSON assets
 const MAPS_BASE_PATH = "./data/maps";
 
+// Global State
 let locationData = {};
 let polygonLayer = null;
 let lineLayer = null;
@@ -36,8 +37,8 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 // =====================================================
-// REAL-TIME FOLDER DISCOVERY (GitHub Trees API)
-// Fetches all repository folders in 1 single API call
+// REAL-TIME REPOSITORY DISCOVERY (GitHub Trees API)
+// Automatically maps dynamic filenames (e.g., 531853_Bhopapur_polygons.geojson)
 // =====================================================
 async function fetchRepoFoldersRealTime() {
     districtSelect.innerHTML = `<option value="">Loading real-time folders...</option>`;
@@ -53,36 +54,37 @@ async function fetchRepoFoldersRealTime() {
             res = await fetch(url);
         }
 
-        if (!res.ok) {
-            throw new Error(`GitHub API HTTP ${res.status}`);
-        }
+        if (!res.ok) throw new Error(`GitHub API HTTP ${res.status}`);
 
         const data = await res.json();
         locationData = {};
 
-        // Parse paths starting with: data/maps/District/Taluka/Village/...
+        // Parse path: data/maps/District/Taluka/Village/FileName.geojson
         data.tree.forEach(item => {
             const parts = item.path.split("/");
+
             if (parts.length >= 5 && parts[0].toLowerCase() === "data" && parts[1].toLowerCase() === "maps") {
                 const district = parts[2];
                 const taluka = parts[3];
                 const village = parts[4];
+                const fileName = parts[5] || parts[parts.length - 1];
 
-                if (!locationData[district]) {
-                    locationData[district] = {};
+                if (fileName.toLowerCase().endsWith(".geojson")) {
+                    if (!locationData[district]) locationData[district] = {};
+                    if (!locationData[district][taluka]) locationData[district][taluka] = {};
+                    if (!locationData[district][taluka][village]) {
+                        locationData[district][taluka][village] = { polygonFile: null, lineFile: null };
+                    }
+
+                    // Flexible match for polygon or line variations in the filename
+                    const lowerName = fileName.toLowerCase();
+                    if (lowerName.includes("polygon")) {
+                        locationData[district][taluka][village].polygonFile = fileName;
+                    } else if (lowerName.includes("line")) {
+                        locationData[district][taluka][village].lineFile = fileName;
+                    }
                 }
-                if (!locationData[district][taluka]) {
-                    locationData[district][taluka] = new Set();
-                }
-                locationData[district][taluka].add(village);
             }
-        });
-
-        // Convert Sets to sorted Arrays
-        Object.keys(locationData).forEach(d => {
-            Object.keys(locationData[d]).forEach(t => {
-                locationData[d][t] = Array.from(locationData[d][t]).sort();
-            });
         });
 
         populateDistricts();
@@ -100,7 +102,7 @@ function populateDistricts() {
     const districts = Object.keys(locationData).sort();
 
     if (districts.length === 0) {
-        districtSelect.innerHTML = `<option value="">No folders found in data/maps</option>`;
+        districtSelect.innerHTML = `<option value="">No valid map folders found</option>`;
         return;
     }
 
@@ -109,7 +111,7 @@ function populateDistricts() {
     });
 }
 
-// Dynamic Cascading Dropdowns
+// Cascading Dropdown Listeners
 districtSelect.addEventListener("change", function () {
     talukaSelect.innerHTML = `<option value="">Select Taluka</option>`;
     villageSelect.innerHTML = `<option value="">Select Village</option>`;
@@ -130,7 +132,7 @@ talukaSelect.addEventListener("change", function () {
     loadMapBtn.disabled = true;
 
     if (this.value && locationData[districtSelect.value][this.value]) {
-        locationData[districtSelect.value][this.value].forEach(v => {
+        Object.keys(locationData[districtSelect.value][this.value]).sort().forEach(v => {
             villageSelect.innerHTML += `<option value="${v}">${v}</option>`;
         });
     }
@@ -140,13 +142,13 @@ villageSelect.addEventListener("change", function () {
     loadMapBtn.disabled = !this.value;
 });
 
-// Run real-time fetch on load
+// Run folder discovery on script load
 fetchRepoFoldersRealTime();
 
 loadMapBtn.addEventListener("click", loadVillageMap);
 
 // =====================================================
-// LOAD GEOJSON MAP FILES FROM GITHUB
+// GEOJSON MAP LOADER
 // =====================================================
 async function loadVillageMap() {
     const d = districtSelect.value;
@@ -155,39 +157,45 @@ async function loadVillageMap() {
 
     clearMapLayers();
 
-    const folderPath = `${MAPS_BASE_PATH}/${encodeURIComponent(d)}/${encodeURIComponent(t)}/${encodeURIComponent(v)}`;
+    const villageInfo = locationData[d]?.[t]?.[v];
+    if (!villageInfo) return alert("Selected village data is unavailable.");
 
+    const folderPath = `${MAPS_BASE_PATH}/${encodeURIComponent(d)}/${encodeURIComponent(t)}/${encodeURIComponent(v)}`;
     let hasLoadedData = false;
 
     try {
         // Load Polygon Layer (Parcels / Gat)
-        const polyRes = await fetch(`${folderPath}/polygon.geojson`);
-        if (polyRes.ok) {
-            const polyData = await polyRes.json();
-            polygonLayer = L.geoJSON(polyData, {
-                style: { color: "#4f46e5", weight: 1, fillColor: "#818cf8", fillOpacity: 0.4 },
-                onEachFeature: (feature, layer) => setupFeatureEvents(feature, layer, 'polygon')
-            }).addTo(map);
+        if (villageInfo.polygonFile) {
+            const polyRes = await fetch(`${folderPath}/${encodeURIComponent(villageInfo.polygonFile)}`);
+            if (polyRes.ok) {
+                const polyData = await polyRes.json();
+                polygonLayer = L.geoJSON(polyData, {
+                    style: { color: "#4f46e5", weight: 1, fillColor: "#818cf8", fillOpacity: 0.4 },
+                    onEachFeature: (feature, layer) => setupFeatureEvents(feature, layer, 'polygon')
+                }).addTo(map);
 
-            map.fitBounds(polygonLayer.getBounds(), { padding: [20, 20] });
-            hasLoadedData = true;
+                map.fitBounds(polygonLayer.getBounds(), { padding: [20, 20] });
+                hasLoadedData = true;
+            }
         }
 
         // Load Line Layer (Roads / Rasta)
-        const lineRes = await fetch(`${folderPath}/line.geojson`);
-        if (lineRes.ok) {
-            const lineData = await lineRes.json();
-            lineLayer = L.geoJSON(lineData, {
-                style: { color: "#e11d48", weight: 3 },
-                onEachFeature: (feature, layer) => setupFeatureEvents(feature, layer, 'line')
-            }).addTo(map);
-            hasLoadedData = true;
+        if (villageInfo.lineFile) {
+            const lineRes = await fetch(`${folderPath}/${encodeURIComponent(villageInfo.lineFile)}`);
+            if (lineRes.ok) {
+                const lineData = await lineRes.json();
+                lineLayer = L.geoJSON(lineData, {
+                    style: { color: "#e11d48", weight: 3 },
+                    onEachFeature: (feature, layer) => setupFeatureEvents(feature, layer, 'line')
+                }).addTo(map);
+                hasLoadedData = true;
+            }
         }
 
         if (hasLoadedData) {
             showInitialDashboardInfo(d, t, v);
         } else {
-            alert(`No polygon.geojson or line.geojson found in folder "${v}".`);
+            alert(`No polygon or line GeoJSON files could be loaded for "${v}".`);
         }
 
     } catch (error) {
@@ -236,14 +244,14 @@ function selectFeature(feature, layer, type) {
 }
 
 // =====================================================
-// DASHBOARD DETAILS
+// DASHBOARD & INFO PANEL
 // =====================================================
 function showFeatureDashboard(properties, type) {
     let title = type === 'polygon' ? "🌾 Parcel / Gat Details" : "🛣️ Road / Line Details";
     infoPanel.innerHTML = `<h2>${title}</h2>`;
 
     if (!properties || Object.keys(properties).length === 0) {
-        infoPanel.innerHTML += `<div class="empty-state">No detailed information available for this selection.</div>`;
+        infoPanel.innerHTML += `<div class="empty-state">No detailed attributes available for this feature.</div>`;
         return;
     }
 
@@ -264,7 +272,7 @@ function showInitialDashboardInfo(d, t, v) {
         <div class="info-row"><span class="info-label">District</span><span class="info-value">${d}</span></div>
         <div class="info-row"><span class="info-label">Taluka</span><span class="info-value">${t}</span></div>
         <div class="info-row"><span class="info-label">Village</span><span class="info-value">${v}</span></div>
-        <div class="empty-state">👆 Click on any Parcel or Road to view its details here.</div>
+        <div class="empty-state">👆 Click on any Parcel or Road to view details here.</div>
     `;
 }
 
@@ -323,7 +331,7 @@ function clearMapLayers() {
 }
 
 // =====================================================
-// MANUAL LOCAL GEOJSON FILE UPLOAD
+// LOCAL GEOJSON FILE UPLOAD (FALLBACK)
 // =====================================================
 if (geojsonInput) {
     geojsonInput.addEventListener("change", function (e) {
